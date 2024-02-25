@@ -3,6 +3,7 @@ import argparse
 import datetime
 import os
 import re
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -20,6 +21,8 @@ parser.add_argument("--hidden_layers", default=1, type=int, help="Number of laye
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -66,6 +69,7 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     # Create the model
     model = keras.Sequential()
     model.add(keras.Input([MNIST.H, MNIST.W, MNIST.C]))
+
     # TODO: Finish the model. Namely:
     # - start by adding a `keras.layers.Rescaling(1 / 255)` layer;
     # - then add a `keras.layers.Flatten()` layer;
@@ -74,6 +78,13 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     #   from `args.activation`, allowing "none", "relu", "tanh", "sigmoid";
     # - finally, add an output fully connected layer with  `MNIST.LABELS` units
     #   and `softmax` activation.
+
+    model.add(keras.layers.Rescaling(1 / 255))
+    model.add(keras.layers.Flatten())
+    activation = args.activation if args.activation != "none" else None
+    for _ in range(args.hidden_layers):
+        model.add(keras.layers.Dense(units=args.hidden_layer, activation=activation))
+    model.add(keras.layers.Dense(units=MNIST.LABELS,activation="softmax"))
 
     model.compile(
         optimizer=keras.optimizers.Adam(),
