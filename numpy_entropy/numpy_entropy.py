@@ -5,8 +5,8 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--data_path", default="numpy_entropy_data.txt", type=str, help="Data distribution path.")
-parser.add_argument("--model_path", default="numpy_entropy_model.txt", type=str, help="Model distribution path.")
+parser.add_argument("--data_path", default="numpy_entropy_data_3.txt", type=str, help="Data distribution path.")
+parser.add_argument("--model_path", default="numpy_entropy_model_3.txt", type=str, help="Model distribution path.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 
 
@@ -50,7 +50,8 @@ def main(args: argparse.Namespace) -> tuple[float, float, float]:
 
     # TODO: Create a NumPy array containing the model distribution.
     model_distribution = np.array(
-        [model_distribution_mapping[outcome] for outcome in sorted(model_distribution_mapping)])
+        [model_distribution_mapping[outcome] for outcome in sorted(model_distribution_mapping) if
+         outcome in frequencies.keys()])
 
     # TODO: Compute the entropy H(data distribution). You should not use
     # manual for/while cycles, but instead use the fact that most NumPy methods
@@ -61,7 +62,10 @@ def main(args: argparse.Namespace) -> tuple[float, float, float]:
     # When some data distribution elements are missing in the model distribution,
     # return `np.inf`.
 
-    if frequencies.keys() == model_distribution_mapping.keys():
+    missing_in_model = frequencies.keys() - model_distribution_mapping.keys()
+    print(missing_in_model)
+
+    if len(missing_in_model) == 0:
         crossentropy = -sum(data_distribution * np.log(model_distribution))
     else:
         crossentropy = np.inf
@@ -69,7 +73,7 @@ def main(args: argparse.Namespace) -> tuple[float, float, float]:
     # TODO: Compute KL-divergence D_KL(data distribution, model_distribution),
     # again using `np.inf` when needed.
 
-    if frequencies.keys() == model_distribution_mapping.keys():
+    if len(missing_in_model) == 0:
         kl_divergence = sum(data_distribution * (np.log(data_distribution) - np.log(model_distribution)))
     else:
         kl_divergence = np.inf
