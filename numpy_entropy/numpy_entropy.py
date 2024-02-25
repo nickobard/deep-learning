@@ -8,17 +8,28 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_path", default="numpy_entropy_data.txt", type=str, help="Data distribution path.")
 parser.add_argument("--model_path", default="numpy_entropy_model.txt", type=str, help="Model distribution path.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
 def main(args: argparse.Namespace) -> tuple[float, float, float]:
     # TODO: Load data distribution, each line containing a datapoint -- a string.
+    frequencies = {}
     with open(args.data_path, "r") as data:
         for line in data:
             line = line.rstrip("\n")
             # TODO: Process the line, aggregating data with built-in Python
             # data structures (not NumPy, which is not suitable for incremental
             # addition and string mapping).
+            if line in frequencies:
+                frequencies[line] += 1
+            else:
+                frequencies[line] = 1
+
+    outcomes_number = sum(frequencies.values())
+    probabilities = {outcome: frequency / outcomes_number for outcome, frequency in frequencies.items()}
+    print(probabilities)
 
     # TODO: Create a NumPy array containing the data distribution. The
     # NumPy array should contain only data, not any mapping. Alternatively,
