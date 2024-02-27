@@ -5,8 +5,8 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--data_path", default="numpy_entropy_data_3.txt", type=str, help="Data distribution path.")
-parser.add_argument("--model_path", default="numpy_entropy_model_3.txt", type=str, help="Model distribution path.")
+parser.add_argument("--data_path", default="numpy_entropy_data_2.txt", type=str, help="Data distribution path.")
+parser.add_argument("--model_path", default="numpy_entropy_model_2.txt", type=str, help="Model distribution path.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 
 
@@ -15,43 +15,46 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Evalu
 
 def main(args: argparse.Namespace) -> tuple[float, float, float]:
     # TODO: Load data distribution, each line containing a datapoint -- a string.
-    frequencies = {}
+    data_frequencies = {}
     with open(args.data_path, "r") as data:
         for line in data:
             line = line.rstrip("\n")
             # TODO: Process the line, aggregating data with built-in Python
             # data structures (not NumPy, which is not suitable for incremental
             # addition and string mapping).
-            if line in frequencies:
-                frequencies[line] += 1
+            if line in data_frequencies:
+                data_frequencies[line] += 1
             else:
-                frequencies[line] = 1
+                data_frequencies[line] = 1
 
-    outcomes_number = sum(frequencies.values())
-    probabilities = {outcome: frequency / outcomes_number for outcome, frequency in frequencies.items()}
+    outcomes_number = sum(data_frequencies.values())
+    data_probabilities = {outcome: frequency / outcomes_number for outcome, frequency in data_frequencies.items()}
+    data_outcomes = data_probabilities.keys()
 
     # TODO: Create a NumPy array containing the data distribution. The
     # NumPy array should contain only data, not any mapping. Alternatively,
     # the NumPy array might be created after loading the model distribution.
 
-    data_distribution = np.array([probabilities[outcome] for outcome in sorted(probabilities)])
+    data_distribution = np.array([data_probabilities[outcome] for outcome in sorted(data_probabilities)])
 
     # TODO: Load model distribution, each line `string \t probability`.
 
-    model_distribution_mapping = {}
+    model_probabilities = {}
 
     with open(args.model_path, "r") as model:
         for line in model:
             line = line.rstrip("\n")
             # TODO: Process the line, aggregating using Python data structures.
 
-            data_element, probability = line.split()
-            model_distribution_mapping[data_element] = float(probability)
+            outcome, probability = line.split()
+            model_probabilities[outcome] = float(probability)
+
+    model_outcomes = model_probabilities.keys()
 
     # TODO: Create a NumPy array containing the model distribution.
     model_distribution = np.array(
-        [model_distribution_mapping[outcome] for outcome in sorted(model_distribution_mapping) if
-         outcome in frequencies.keys()])
+        [model_probabilities[outcome] for outcome in sorted(model_outcomes) if
+         outcome in data_outcomes])
 
     # TODO: Compute the entropy H(data distribution). You should not use
     # manual for/while cycles, but instead use the fact that most NumPy methods
@@ -62,8 +65,7 @@ def main(args: argparse.Namespace) -> tuple[float, float, float]:
     # When some data distribution elements are missing in the model distribution,
     # return `np.inf`.
 
-    missing_in_model = frequencies.keys() - model_distribution_mapping.keys()
-    print(missing_in_model)
+    missing_in_model = data_outcomes - model_outcomes
 
     if len(missing_in_model) == 0:
         crossentropy = -sum(data_distribution * np.log(model_distribution))
