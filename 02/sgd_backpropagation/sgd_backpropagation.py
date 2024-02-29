@@ -3,6 +3,7 @@ import argparse
 import datetime
 import os
 import re
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -21,6 +22,8 @@ parser.add_argument("--learning_rate", default=0.1, type=float, help="Learning r
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -39,7 +42,9 @@ class Model(keras.Model):
         # - _W2, which is a trainable variable of size `[args.hidden_layer, MNIST.LABELS]`,
         #   initialized to `keras.random.normal` value `with stddev=0.1` and `seed=args.seed`,
         # - _b2, which is a trainable variable of size `[MNIST.LABELS]` initialized to zeros
-        ...
+        self._W2 = keras.Variable(keras.random.normal([args.hidden_layer, MNIST.LABELS], stddev=0.1, seed=args.seed),
+                                  trainable=True)
+        self._b2 = keras.Variable(keras.ops.zeros([MNIST.LABELS]), trainable=True)
 
     def predict(self, inputs: torch.Tensor) -> torch.Tensor:
         # TODO: Define the computation of the network. Notably:
@@ -52,7 +57,14 @@ class Model(keras.Model):
         # - apply `keras.ops.tanh`
         # - multiply the result by `self._W2` and then add `self._b2`
         # - finally apply `keras.ops.softmax` and return the result
-        return ...
+        casted_inputs = keras.ops.cast(inputs, dtype="float32")
+        normalized = casted_inputs / 255
+        prepared_inputs = normalized.reshape(inputs.shape[0], -1)
+        hidden_layers = prepared_inputs @ self._W1 + self._b1
+        activations = keras.ops.tanh(hidden_layers)
+        outputs = activations @ self._W2 + self._b2
+        predictions = keras.ops.softmax(outputs)
+        return predictions
 
     def train_epoch(self, dataset: MNIST.Datasplit) -> None:
         for batch in dataset.batches(self._args.batch_size):
@@ -63,15 +75,22 @@ class Model(keras.Model):
             # might be smaller.
 
             # TODO: Compute the predicted probabilities of the batch images using `self.predict`
-            probabilities = ...
-
+            inputs, labels = batch['images'], batch['labels']
+            probabilities = self.predict(inputs)
             # TODO: Manually compute the loss:
             # - For every batch example, the loss is the categorical crossentropy of the
             #   predicted probabilities and the gold label. To compute the crossentropy, you can
             #   - either use `keras.ops.one_hot` to obtain one-hot encoded gold labels,
             #   - or suitably use `keras.ops.take_along_axis` to "index" the predicted probabilities.
             # - Finally, compute the average across the batch examples.
-            loss = ...
+            labels = keras.ops.one_hot(labels, num_classes=MNIST.LABELS)
+
+            # manual loss - showed same results as the loss function from keras
+            # loss_manual = -keras.ops.sum(labels * keras.ops.log(probabilities), axis=1)
+            # loss_without_reduction = keras.ops.categorical_crossentropy(labels, probabilites)
+            # we need to sum up all batches loss to compute the gradient
+            cce = keras.losses.CategoricalCrossentropy()
+            loss = cce(y_true=labels, y_pred=probabilities)
 
             # We create a list of all variables. Note that a `keras.Model/Layer` automatically
             # tracks owned variables, so we could also use `self.trainable_variables`
@@ -82,7 +101,8 @@ class Model(keras.Model):
             # backpropagation algorithm by
             # - first resetting the gradients of all variables to zero with `self.zero_grad()`,
             # - then calling `loss.backward()`.
-            ...
+            self.zero_grad()
+            loss.backward()
 
             gradients = [variable.value.grad for variable in variables]
             with torch.no_grad():
@@ -91,7 +111,8 @@ class Model(keras.Model):
                     # for the variable and computed gradient. You can modify the
                     # variable value with `variable.assign` or in this case the more
                     # efficient `variable.assign_sub`.
-                    ...
+                    g_hat = gradient / len(batch)
+                    variable.assign_sub(g_hat * self._args.learning_rate)
 
     def evaluate(self, dataset: MNIST.Datasplit) -> float:
         # Compute the accuracy of the model prediction
@@ -99,11 +120,13 @@ class Model(keras.Model):
         for batch in dataset.batches(self._args.batch_size):
             # TODO: Compute the probabilities of the batch images using `self.predict`
             # and convert them to Numpy with `keras.ops.convert_to_numpy`.
-            probabilities = ...
+            inputs, labels = batch['images'], batch['labels']
+            probabilities = keras.ops.convert_to_numpy(self.predict(inputs))
 
             # TODO: Evaluate how many batch examples were predicted
             # correctly and increase `correct` variable accordingly.
-            correct += ...
+            predicted_labels = np.argmax(probabilities, axis=1)
+            correct += np.sum(predicted_labels == labels)
 
         return correct / dataset.size
 
@@ -132,14 +155,14 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
 
     for epoch in range(args.epochs):
         # TODO: Run the `train_epoch` with `mnist.train` dataset
-
+        model.train_epoch(mnist.test)
         # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
-        accuracy = ...
+        accuracy = model.evaluate(mnist.dev)
         print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
         writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
 
     # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
-    test_accuracy = ...
+    test_accuracy = model.evaluate(mnist.test)
     print("Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy), flush=True)
     writer.add_scalar("test/accuracy", 100 * accuracy, epoch + 1)
 
