@@ -34,7 +34,7 @@ class Model(keras.Model):
 
         self._W1 = keras.Variable(
             keras.random.normal([MNIST.W * MNIST.H * MNIST.C, args.hidden_layer], stddev=0.1, seed=args.seed),
-            trainable=True,
+            trainable=True
         )
         self._b1 = keras.Variable(keras.ops.zeros([args.hidden_layer]), trainable=True)
 
@@ -86,11 +86,19 @@ class Model(keras.Model):
             labels = keras.ops.one_hot(labels, num_classes=MNIST.LABELS)
 
             # manual loss - showed same results as the loss function from keras
-            # loss_manual = -keras.ops.sum(labels * keras.ops.log(probabilities), axis=1)
+            loss_manual = -keras.ops.sum(labels * keras.ops.log(probabilities), axis=1)
+            loss = keras.ops.mean(loss_manual)
             # loss_without_reduction = keras.ops.categorical_crossentropy(labels, probabilites)
             # we need to sum up all batches loss to compute the gradient
-            cce = keras.losses.CategoricalCrossentropy()
-            loss = cce(y_true=labels, y_pred=probabilities)
+            # cce_sum_over_batch_size = keras.losses.CategoricalCrossentropy()
+            # print(inputs.shape[0])
+            # when it is over batch size - it is meaned
+            # loss_sum_over_batch_size = cce_sum_over_batch_size(y_true=labels, y_pred=probabilities)
+            # cce_sum = keras.losses.CategoricalCrossentropy(reduction='sum')
+            # loss_sum = cce_sum(y_true=labels, y_pred=probabilities)
+            # loss_sum_meaned = loss_sum / inputs.shape[0]
+
+            # loss = keras.ops.mean(keras.ops.categorical_crossentropy(target=labels, output=probabilities))
 
             # We create a list of all variables. Note that a `keras.Model/Layer` automatically
             # tracks owned variables, so we could also use `self.trainable_variables`
@@ -110,8 +118,8 @@ class Model(keras.Model):
                     # TODO: Perform the SGD update with learning rate `self._args.learning_rate`
                     # for the variable and computed gradient. You can modify the
                     # variable value with `variable.assign` or in this case the more
-                    # efficient `variable.assign_sub`.
-                    g_hat = gradient / len(batch)
+                    # efficient `variable.assign_sub.
+                    g_hat = gradient
                     variable.assign_sub(g_hat * self._args.learning_rate)
 
     def evaluate(self, dataset: MNIST.Datasplit) -> float:
@@ -126,7 +134,8 @@ class Model(keras.Model):
             # TODO: Evaluate how many batch examples were predicted
             # correctly and increase `correct` variable accordingly.
             predicted_labels = np.argmax(probabilities, axis=1)
-            correct += np.sum(predicted_labels == labels)
+            correctly_predicted = predicted_labels == labels
+            correct += np.sum(correctly_predicted)
 
         return correct / dataset.size
 
@@ -155,7 +164,7 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
 
     for epoch in range(args.epochs):
         # TODO: Run the `train_epoch` with `mnist.train` dataset
-        model.train_epoch(mnist.test)
+        model.train_epoch(mnist.train)
         # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
         accuracy = model.evaluate(mnist.dev)
         print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
