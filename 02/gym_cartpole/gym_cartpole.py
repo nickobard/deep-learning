@@ -3,6 +3,7 @@ import argparse
 import datetime
 import os
 import re
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -17,9 +18,12 @@ parser.add_argument("--render", default=False, action="store_true", help="Render
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # If you add more arguments, ReCodEx will keep them with your default values.
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--epochs", default=..., type=int, help="Number of epochs.")
+parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
+parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
 parser.add_argument("--model", default="gym_cartpole_model.keras", type=str, help="Output model path.")
+parser.add_argument("--hidden_layer", default=128, type=int, help="Size of the hidden layer.")
+parser.add_argument("--hidden_layers", default=1, type=int, help="Number of layers.")
+parser.add_argument("--activation", default="none", choices=["none", "relu", "tanh", "sigmoid"], help="Activation.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -48,7 +52,7 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
 
 
 def evaluate_model(
-    model: keras.Model, seed: int = 42, episodes: int = 100, render: bool = False, report_per_episode: bool = False
+        model: keras.Model, seed: int = 42, episodes: int = 100, render: bool = False, report_per_episode: bool = False
 ) -> float:
     """Evaluate the given model on CartPole-v1 environment.
 
@@ -106,10 +110,21 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         # the model can perform any of:
         # - binary classification with 1 output and sigmoid activation;
         # - two-class classification with 2 outputs and softmax activation.
-        model = ...
+
+        model = keras.Sequential()
+
+        model.add(keras.layers.Input([observations.shape[1]]))
+        activation = args.activation if args.activation != "none" else None
+        for _ in range(args.hidden_layers):
+            model.add(keras.layers.Dense(units=args.hidden_layer, activation=activation))
+        model.add(keras.layers.Dense(units=1, activation="sigmoid"))
 
         # TODO: Prepare the model for training using the `model.compile` method.
-        model.compile(...)
+        model.compile(optimizer=keras.optimizers.Adam(),
+                      loss=keras.losses.BinaryCrossentropy(),
+                      metrics=[keras.metrics.BinaryAccuracy(name="accuracy")])
+
+        model.summary()
 
         tb_callback = TorchTensorBoardCallback(args.logdir)
         model.fit(observations, labels, batch_size=args.batch_size, epochs=args.epochs, callbacks=[tb_callback])
