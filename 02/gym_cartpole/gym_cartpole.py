@@ -29,6 +29,7 @@ parser.add_argument("--learning_rate", default=0.01, type=float, help="Initial l
 parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.")
 parser.add_argument("--momentum", default=None, type=float, help="Nesterov momentum to use in SGD.")
 parser.add_argument("--optimizer", default="SGD", choices=["SGD", "Adam"], help="Optimizer to use.")
+parser.add_argument("--val", default=0, type=int, help="How many validation data points to use.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -95,6 +96,8 @@ def evaluate_model(
 def main(args: argparse.Namespace) -> keras.Model | None:
     # Set the random seed and the number of threads.
     keras.utils.set_random_seed(args.seed)
+    np.random.seed(args.seed)
+
     if args.threads:
         torch.set_num_threads(args.threads)
         torch.set_num_interop_threads(args.threads)
@@ -109,6 +112,7 @@ def main(args: argparse.Namespace) -> keras.Model | None:
 
         # Load the data
         data = np.loadtxt("gym_cartpole_data.txt")
+        np.random.shuffle(data)
         observations, labels = data[:, :-1], data[:, -1].astype(np.int32)
 
         # TODO: Create the model in the `model` variable. Note that
@@ -142,7 +146,7 @@ def main(args: argparse.Namespace) -> keras.Model | None:
             max_steps = (observations.shape[0] // args.batch_size) * args.epochs
             cosine_decay = 0.5 * (1 + np.cos(np.pi))
             alpha = (args.learning_rate_final / args.learning_rate) / (1 - cosine_decay) - cosine_decay / (
-                        1 - cosine_decay)
+                    1 - cosine_decay)
             learning_rate = keras.optimizers.schedules.CosineDecay(
                 initial_learning_rate=args.learning_rate,
                 alpha=alpha,
@@ -170,8 +174,18 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         model.summary()
 
         tb_callback = TorchTensorBoardCallback(args.logdir)
-        model.fit(observations, labels, batch_size=args.batch_size, epochs=args.epochs, callbacks=[tb_callback])
 
+        if args.val == 0:
+            model.fit(x=observations, y=labels, batch_size=args.batch_size, epochs=args.epochs,
+                      callbacks=[tb_callback])
+        else:
+            x_train, y_train = observations[:-args.val, :], labels[:-args.val]
+            x_val, y_val = observations[-args.val:, :], labels[-args.val:]
+            # print(x_train.shape, y_train.shape)
+            # print(x_val.shape, y_val.shape)
+            model.fit(x=x_train, y=y_train, batch_size=args.batch_size, epochs=args.epochs,
+                      validation_data=(x_val, y_val),
+                      callbacks=[tb_callback])
         # Save the model, without the optimizer state.
         model.save(args.model)
 
