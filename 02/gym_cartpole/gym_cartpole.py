@@ -24,6 +24,11 @@ parser.add_argument("--model", default="gym_cartpole_model.keras", type=str, hel
 parser.add_argument("--hidden_layer", default=128, type=int, help="Size of the hidden layer.")
 parser.add_argument("--hidden_layers", default=1, type=int, help="Number of layers.")
 parser.add_argument("--activation", default="none", choices=["none", "relu", "tanh", "sigmoid"], help="Activation.")
+parser.add_argument("--decay", default=None, choices=["linear", "exponential", "cosine"], help="Decay type")
+parser.add_argument("--learning_rate", default=0.01, type=float, help="Initial learning rate.")
+parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.")
+parser.add_argument("--momentum", default=None, type=float, help="Nesterov momentum to use in SGD.")
+parser.add_argument("--optimizer", default="SGD", choices=["SGD", "Adam"], help="Optimizer to use.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -119,8 +124,46 @@ def main(args: argparse.Namespace) -> keras.Model | None:
             model.add(keras.layers.Dense(units=args.hidden_layer, activation=activation))
         model.add(keras.layers.Dense(units=1, activation="sigmoid"))
 
+        if args.decay == 'linear':
+            max_steps = (observations.shape[0] // args.batch_size) * args.epochs
+            learning_rate = keras.optimizers.schedules.PolynomialDecay(
+                initial_learning_rate=args.learning_rate,
+                end_learning_rate=args.learning_rate_final,
+                decay_steps=max_steps
+            )
+        elif args.decay == 'exponential':
+            max_steps = (observations.shape[0] // args.batch_size) * args.epochs
+            learning_rate = keras.optimizers.schedules.ExponentialDecay(
+                initial_learning_rate=args.learning_rate,
+                decay_rate=args.learning_rate_final / args.learning_rate,
+                decay_steps=max_steps
+            )
+        elif args.decay == 'cosine':
+            max_steps = (observations.shape[0] // args.batch_size) * args.epochs
+            cosine_decay = 0.5 * (1 + np.cos(np.pi))
+            alpha = (args.learning_rate_final / args.learning_rate) / (1 - cosine_decay) - cosine_decay / (
+                        1 - cosine_decay)
+            learning_rate = keras.optimizers.schedules.CosineDecay(
+                initial_learning_rate=args.learning_rate,
+                alpha=alpha,
+                decay_steps=max_steps
+            )
+        else:
+            learning_rate = args.learning_rate
+
+        if args.optimizer == 'SGD':
+
+            if args.momentum is not None:
+                kwargs = {'momentum': args.momentum, 'nesterov': True}
+            else:
+                kwargs = {}
+
+            optimizer = keras.optimizers.SGD(learning_rate=learning_rate, **kwargs)
+        else:
+            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+
         # TODO: Prepare the model for training using the `model.compile` method.
-        model.compile(optimizer=keras.optimizers.Adam(),
+        model.compile(optimizer=optimizer,
                       loss=keras.losses.BinaryCrossentropy(),
                       metrics=[keras.metrics.BinaryAccuracy(name="accuracy")])
 
