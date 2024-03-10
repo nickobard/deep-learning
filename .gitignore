@@ -285,5 +285,4 @@ VENV_DIR
 # End of https://www.toptal.com/developers/gitignore/api/venv
 
 npfl138
-logs
 mnist.npz
