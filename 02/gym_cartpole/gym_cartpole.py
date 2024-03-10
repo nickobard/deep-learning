@@ -29,9 +29,11 @@ parser.add_argument("--learning_rate", default=0.01, type=float, help="Initial l
 parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.")
 parser.add_argument("--momentum", default=None, type=float, help="Nesterov momentum to use in SGD.")
 parser.add_argument("--optimizer", default="SGD", choices=["SGD", "Adam"], help="Optimizer to use.")
-parser.add_argument("--val", default=0, type=int, help="How many validation data points to use.")
+parser.add_argument("--val_split", default=0.0, type=float, help="How many validation data points to use in.")
 parser.add_argument("--eval_after_train", default=True, action="store_true",
                     help="Make the model cartpole evaluation after training.")
+parser.add_argument("--eval_after_train_steps", default=10, type=int,
+                    help="Steps number to make the model cartpole evaluation after training.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -62,13 +64,16 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
 
     def on_train_end(self, logs=None):
         if args.eval_after_train:
-            score = evaluate_model(self.model, seed=args.seed, episodes=10, report_per_episode=True)
+            writer = self.writer("cartpole_evaluation")
+            score = evaluate_model(self.model, seed=args.seed, episodes=args.eval_after_train_steps,
+                                   report_per_episode=True, writer=writer)
             print("The average score was {}.".format(score))
-            self.writer("cartpole_evaluation").add_scalar("score", score)
+            writer.add_scalar("score", score, args.eval_after_train_steps + 1)
 
 
 def evaluate_model(
-        model: keras.Model, seed: int = 42, episodes: int = 100, render: bool = False, report_per_episode: bool = False
+        model: keras.Model, seed: int = 42, episodes: int = 100, render: bool = False, report_per_episode: bool = False,
+        writer=None
 ) -> float:
     """Evaluate the given model on CartPole-v1 environment.
 
@@ -96,7 +101,8 @@ def evaluate_model(
             observation, reward, terminated, truncated, info = env.step(action)
             score += reward
             done = terminated or truncated
-
+        if writer:
+            writer.add_scalar("score", score, episode + 1)
         total_score += score
         if report_per_episode:
             print("The episode {} finished with score {}.".format(episode + 1, score))
@@ -185,17 +191,8 @@ def main(args: argparse.Namespace) -> keras.Model | None:
 
         tb_callback = TorchTensorBoardCallback(args.logdir)
 
-        if args.val == 0:
-            model.fit(x=observations, y=labels, batch_size=args.batch_size, epochs=args.epochs,
-                      callbacks=[tb_callback])
-        else:
-            x_train, y_train = observations[:-args.val, :], labels[:-args.val]
-            x_val, y_val = observations[-args.val:, :], labels[-args.val:]
-            # print(x_train.shape, y_train.shape)
-            # print(x_val.shape, y_val.shape)
-            model.fit(x=x_train, y=y_train, batch_size=args.batch_size, epochs=args.epochs,
-                      validation_data=(x_val, y_val),
-                      callbacks=[tb_callback])
+        model.fit(x=observations, y=labels, batch_size=args.batch_size, epochs=args.epochs,
+                  callbacks=[tb_callback], validation_split=args.val_split)
         # Save the model, without the optimizer state.
         model.save(args.model)
 
