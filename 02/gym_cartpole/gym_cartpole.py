@@ -64,11 +64,11 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
 
     def on_train_end(self, logs=None):
         if args.eval_after_train:
-            writer = self.writer("cartpole_evaluation")
+            writer = self.writer("train")
             score = evaluate_model(self.model, seed=args.seed, episodes=args.eval_after_train_steps,
                                    report_per_episode=True, writer=writer)
             print("The average score was {}.".format(score))
-            writer.add_scalar("score", score, args.eval_after_train_steps + 1)
+            writer.add_scalar("average score", score, args.eval_after_train_steps)
 
 
 def evaluate_model(
