@@ -30,6 +30,8 @@ parser.add_argument("--learning_rate_final", default=None, type=float, help="Fin
 parser.add_argument("--momentum", default=None, type=float, help="Nesterov momentum to use in SGD.")
 parser.add_argument("--optimizer", default="SGD", choices=["SGD", "Adam"], help="Optimizer to use.")
 parser.add_argument("--val", default=0, type=int, help="How many validation data points to use.")
+parser.add_argument("--eval_after_train", default=True, action="store_true",
+                    help="Make the model cartpole evaluation after training.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -44,17 +46,25 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
         return self._writers[writer]
 
     def add_logs(self, writer, logs, step):
+        # print(" - ", logs, " (add logs)")
         if logs:
             for key, value in logs.items():
                 self.writer(writer).add_scalar(key, value, step)
             self.writer(writer).flush()
 
     def on_epoch_end(self, epoch, logs=None):
+        # print(" - ", logs, " (on epoch end)")
         if logs:
             if isinstance(getattr(self.model, "optimizer", None), keras.optimizers.Optimizer):
                 logs = logs | {"learning_rate": keras.ops.convert_to_numpy(self.model.optimizer.learning_rate)}
             self.add_logs("train", {k: v for k, v in logs.items() if not k.startswith("val_")}, epoch + 1)
-            self.add_logs("val", {k[4:]: v for k, v in logs.items() if k.startswith("val_")}, epoch + 1)
+            self.add_logs("val", {k: v for k, v in logs.items() if k.startswith("val_")}, epoch + 1)
+
+    def on_train_end(self, logs=None):
+        if args.eval_after_train:
+            score = evaluate_model(self.model, seed=args.seed, episodes=10, report_per_episode=True)
+            print("The average score was {}.".format(score))
+            self.writer("cartpole_evaluation").add_scalar("score", score)
 
 
 def evaluate_model(
