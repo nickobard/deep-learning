@@ -3,6 +3,7 @@ import argparse
 import datetime
 import os
 import re
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -21,6 +22,8 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Evalu
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 parser.add_argument("--weight_decay", default=0, type=float, help="Weight decay strength.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -74,8 +77,10 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     model = keras.Sequential()
     model.add(keras.layers.Rescaling(1 / 255))
     model.add(keras.layers.Flatten())
+    model.add(keras.layers.Dropout(rate=args.dropout))
     for hidden_layer in args.hidden_layers:
         model.add(keras.layers.Dense(hidden_layer, activation="relu"))
+        model.add(keras.layers.Dropout(rate=args.dropout))
     model.add(keras.layers.Dense(MNIST.LABELS, activation="softmax"))
 
     # TODO: Implement label smoothing with the given `args.label_smoothing` strength.
@@ -90,20 +95,22 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     # rate and a weight decay of strength `args.weight_decay`. Then call the
     # `exclude_from_weight_decay` method to specify that all variables with "bias"
     # in their name should not be decayed.
-    optimizer = ...
+    optimizer = keras.optimizers.AdamW(weight_decay=args.weight_decay)
+    optimizer.exclude_from_weight_decay(var_names=['bias'])
 
     model.compile(
         optimizer=optimizer,
-        loss=keras.losses.SparseCategoricalCrossentropy(),
-        metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
+        loss=keras.losses.CategoricalCrossentropy(label_smoothing=args.label_smoothing),
+        metrics=[keras.metrics.CategoricalAccuracy(name="accuracy")],
     )
 
     tb_callback = TorchTensorBoardCallback(args.logdir)
 
     logs = model.fit(
-        mnist.train.data["images"], mnist.train.data["labels"],
+        mnist.train.data["images"], keras.ops.one_hot(mnist.train.data["labels"], num_classes=MNIST.LABELS),
         batch_size=args.batch_size, epochs=args.epochs,
-        validation_data=(mnist.dev.data["images"], mnist.dev.data["labels"]),
+        validation_data=(
+            mnist.dev.data["images"], keras.ops.one_hot(mnist.dev.data["labels"], num_classes=MNIST.LABELS)),
         callbacks=[tb_callback],
     )
 
