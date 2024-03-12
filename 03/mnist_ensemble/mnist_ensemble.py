@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -17,6 +18,8 @@ parser.add_argument("--models", default=3, type=int, help="Number of models.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -34,11 +37,12 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     models = []
     for model in range(args.models):
         models.append(keras.Sequential([
-            keras.layers.Rescaling(1 / 255),
-            keras.layers.Flatten(),
-        ] + [keras.layers.Dense(hidden_layer, activation="relu") for hidden_layer in args.hidden_layers] + [
-            keras.layers.Dense(MNIST.LABELS, activation="softmax"),
-        ]))
+                                           keras.layers.Rescaling(1 / 255),
+                                           keras.layers.Flatten(),
+                                       ] + [keras.layers.Dense(hidden_layer, activation="relu") for hidden_layer in
+                                            args.hidden_layers] + [
+                                           keras.layers.Dense(MNIST.LABELS, activation="softmax"),
+                                       ]))
 
         models[-1].compile(
             optimizer=keras.optimizers.Adam(),
@@ -56,7 +60,22 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     individual_accuracies, ensemble_accuracies = [], []
     for model in range(args.models):
         # TODO: Compute the accuracy on the dev set for the individual `models[model]`.
-        individual_accuracy = ...
+        def accuracy(model):
+            labels = keras.ops.convert_to_tensor(mnist.dev.data['labels'])
+            probabilities = model.predict(mnist.dev.data["images"])
+            predicted_labels = keras.ops.argmax(probabilities, axis=1)
+            correctly_predicted = predicted_labels == labels
+            accuracy = keras.ops.mean(correctly_predicted)
+            return accuracy
+
+        def correctly_predicted(model):
+            labels = keras.ops.convert_to_tensor(mnist.dev.data['labels'])
+            probabilities = model.predict(mnist.dev.data["images"])
+            predicted_labels = keras.ops.argmax(probabilities, axis=1)
+            correctly_predicted = predicted_labels == labels
+            return keras.ops.sum(correctly_predicted)
+
+        individual_accuracy = accuracy(models[model])
 
         # TODO: Compute the accuracy on the dev set for the ensemble `models[0:model+1]`.
         #
@@ -69,7 +88,10 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
         #    need to construct Keras ensemble model at all, and instead call `model.predict`
         #    on the individual models and average the results. To measure accuracy,
         #    either do it completely manually or use `keras.metrics.SparseCategoricalAccuracy`.
-        ensemble_accuracy = ...
+        c_p = 0
+        for m in models[0:model + 1]:
+            c_p += correctly_predicted(m)
+        ensemble_accuracy = c_p / ((model + 1) * mnist.dev.size)
 
         # Store the accuracies
         individual_accuracies.append(individual_accuracy)
