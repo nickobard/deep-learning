@@ -60,22 +60,14 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     individual_accuracies, ensemble_accuracies = [], []
     for model in range(args.models):
         # TODO: Compute the accuracy on the dev set for the individual `models[model]`.
-        def accuracy(model):
-            labels = keras.ops.convert_to_tensor(mnist.dev.data['labels'])
-            probabilities = model.predict(mnist.dev.data["images"])
-            predicted_labels = keras.ops.argmax(probabilities, axis=1)
-            correctly_predicted = predicted_labels == labels
-            accuracy = keras.ops.mean(correctly_predicted)
-            return accuracy
+        X = mnist.dev.data["images"]
+        y = mnist.dev.data["labels"]
 
-        def correctly_predicted(model):
-            labels = keras.ops.convert_to_tensor(mnist.dev.data['labels'])
-            probabilities = model.predict(mnist.dev.data["images"])
-            predicted_labels = keras.ops.argmax(probabilities, axis=1)
-            correctly_predicted = predicted_labels == labels
-            return keras.ops.sum(correctly_predicted)
+        cat_acc = keras.metrics.SparseCategoricalAccuracy()
 
-        individual_accuracy = accuracy(models[model])
+        cat_acc.update_state(y_true=y, y_pred=models[model].predict(X))
+        individual_accuracy = cat_acc.result()
+        cat_acc.reset_state()
 
         # TODO: Compute the accuracy on the dev set for the ensemble `models[0:model+1]`.
         #
@@ -88,14 +80,15 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
         #    need to construct Keras ensemble model at all, and instead call `model.predict`
         #    on the individual models and average the results. To measure accuracy,
         #    either do it completely manually or use `keras.metrics.SparseCategoricalAccuracy`.
-        c_p = 0
+        predictions = []
         for m in models[0:model + 1]:
-            c_p += correctly_predicted(m)
-        ensemble_accuracy = c_p / ((model + 1) * mnist.dev.size)
+            predictions.append(m.predict(X))
+        mean_predictions = keras.ops.mean(predictions, axis=0)
+        cat_acc.update_state(y_true=y, y_pred=mean_predictions)
 
         # Store the accuracies
         individual_accuracies.append(individual_accuracy)
-        ensemble_accuracies.append(ensemble_accuracy)
+        ensemble_accuracies.append(cat_acc.result())
     return individual_accuracies, ensemble_accuracies
 
 
