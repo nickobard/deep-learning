@@ -3,6 +3,7 @@ import argparse
 import datetime
 import os
 import re
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -14,12 +15,15 @@ from uppercase_data import UppercaseData
 # `alphabet_size`, `batch_size`, `epochs`, and `window`.
 # Also, you can set the number of threads to 0 to use all your CPU cores.
 parser = argparse.ArgumentParser()
-parser.add_argument("--alphabet_size", default=..., type=int, help="If given, use this many most frequent chars.")
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--epochs", default=..., type=int, help="Number of epochs.")
+parser.add_argument("--alphabet_size", default=10, type=int, help="If given, use this many most frequent chars.")
+parser.add_argument("--batch_size", default=10000, type=int, help="Batch size.")
+parser.add_argument("--epochs", default=1, type=int, help="Number of epochs.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-parser.add_argument("--window", default=..., type=int, help="Window size to use.")
+parser.add_argument("--window", default=1, type=int, help="Window size to use.")
+
+parser.add_argument("--activation", default="relu", choices=["none", "relu", "tanh", "sigmoid"], help="Activation.")
+parser.add_argument("--hidden_layers", default=[100], nargs="*", type=int, help="Hidden layer sizes.")
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -79,7 +83,30 @@ def main(args: argparse.Namespace) -> None:
     #   You can then flatten the one-hot encoded windows and follow with a dense layer.
     # - Alternatively, you can use `keras.layers.Embedding` (which is an efficient
     #   implementation of one-hot encoding followed by a Dense layer) and flatten afterwards.
-    model = ...
+    activation = args.activation if args.activation != "none" else None
+
+    model = keras.models.Sequential([
+                                        keras.layers.Input(shape=[2 * args.window + 1], dtype="int32"),
+                                        keras.layers.CategoryEncoding(args.alphabet_size, output_mode="one_hot"),
+                                        keras.layers.Flatten()] + [
+                                        keras.layers.Dense(units=hidden_layer, activation=activation) for
+                                        hidden_layer in args.hidden_layers] + [
+                                        keras.layers.Dense(1, activation='sigmoid')
+                                    ])
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(),
+        loss=keras.losses.BinaryCrossentropy(),
+        metrics=[keras.metrics.BinaryAccuracy(name="Accuracy")]
+    )
+
+    model.summary()
+
+    tb_callback = TorchTensorBoardCallback(args.logdir)
+
+    model.fit(x=uppercase_data.train.data['windows'], y=uppercase_data.train.data['labels'], batch_size=args.batch_size,
+              epochs=args.epochs, callbacks=[tb_callback],
+              validation_data=(uppercase_data.dev.data['windows'], uppercase_data.dev.data['labels']))
 
     # TODO: Generate correctly capitalized test set.
     # Use `uppercase_data.test.text` as input, capitalize suitable characters,
@@ -87,7 +114,9 @@ def main(args: argparse.Namespace) -> None:
     # `uppercase_test.txt` in the `args.logdir` directory).
     os.makedirs(args.logdir, exist_ok=True)
     with open(os.path.join(args.logdir, "uppercase_test.txt"), "w", encoding="utf-8") as predictions_file:
-        ...
+        prediction = model.predict(uppercase_data.test.data['windows'])
+        for index, character in enumerate(uppercase_data.test.text):
+            predictions_file.write(str.upper(character) if prediction[index] > 0.5 else character)
 
 
 if __name__ == "__main__":
