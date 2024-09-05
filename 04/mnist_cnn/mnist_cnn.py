@@ -91,7 +91,6 @@ class Model(keras.Model):
                                                      strides=(stride, stride),
                                                      padding=padding,
                                                      activation="relu")(hidden)
-                        hidden = hidden + x
                     elif rl_hparams[0] == "CB":
                         filters = int(rl_hparams[1])
                         kernel_size = int(rl_hparams[2])
@@ -103,9 +102,9 @@ class Model(keras.Model):
                                                      activation=None, use_bias=False)(hidden)
                         hidden = keras.layers.BatchNormalization()(hidden)
                         hidden = keras.layers.ReLU()(hidden)
-                        hidden = hidden + x
                     else:
                         ArgumentError(argument=residual_layer, message=f"Unexpected cnn argument: {layer}")
+                hidden = hidden + x
             elif hparams[0] == "F":
                 hidden = keras.layers.Flatten()(hidden)
             elif hparams[0] == "H":
