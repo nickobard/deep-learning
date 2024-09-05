@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import os
+from argparse import ArgumentError
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import keras
@@ -16,6 +18,8 @@ parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -24,7 +28,7 @@ class Model(keras.Model):
         # TODO: Create the model. The template uses the functional API, but
         # feel free to use subclassing if you want.
         inputs = keras.Input(shape=[MNIST.H, MNIST.W, MNIST.C])
-        hidden = keras.layers.Rescaling(1 / 255)(inputs)
+        rescaled = keras.layers.Rescaling(1 / 255)(inputs)
 
         # TODO: Add CNN layers specified by `args.cnn`, which contains
         # a comma-separated list of the following layers:
@@ -46,6 +50,25 @@ class Model(keras.Model):
         # You can assume the resulting network is valid; it is fine to crash if it is not.
         #
         # Produce the results in the variable `hidden`.
+        layer_args = args.cnn.split(",")
+        for layer in layer_args:
+            if layer.startswith("CB"):
+                ...
+            elif layer.startswith("C"):
+                ...
+            elif layer.startswith("M"):
+                ...
+            elif layer.startswith("R"):
+                ...
+            elif layer.startswith("F"):
+                ...
+            elif layer.startswith("H"):
+                ...
+            elif layer.startswith("D"):
+                ...
+            else:
+                raise ArgumentError(argument=layer, message=f"Unexpected cnn argument: {layer}")
+
         hidden = ...
 
         # Add the final output layer
