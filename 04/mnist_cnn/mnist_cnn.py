@@ -7,6 +7,7 @@ os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless sp
 
 import keras
 import torch
+import re
 
 from mnist import MNIST
 
@@ -28,7 +29,7 @@ class Model(keras.Model):
         # TODO: Create the model. The template uses the functional API, but
         # feel free to use subclassing if you want.
         inputs = keras.Input(shape=[MNIST.H, MNIST.W, MNIST.C])
-        rescaled = keras.layers.Rescaling(1 / 255)(inputs)
+        hidden = keras.layers.Rescaling(1 / 255)(inputs)
 
         # TODO: Add CNN layers specified by `args.cnn`, which contains
         # a comma-separated list of the following layers:
@@ -50,26 +51,71 @@ class Model(keras.Model):
         # You can assume the resulting network is valid; it is fine to crash if it is not.
         #
         # Produce the results in the variable `hidden`.
-        layer_args = args.cnn.split(",")
+        layer_args = re.findall(r'[^,]*\[.*\]|[^,]+', args.cnn)
         for layer in layer_args:
-            if layer.startswith("CB"):
-                ...
-            elif layer.startswith("C"):
-                ...
-            elif layer.startswith("M"):
-                ...
-            elif layer.startswith("R"):
-                ...
-            elif layer.startswith("F"):
-                ...
-            elif layer.startswith("H"):
-                ...
-            elif layer.startswith("D"):
-                ...
+            hparams = layer.split("-")
+            if hparams[0] == "C":
+                filters = int(hparams[1])
+                kernel_size = int(hparams[2])
+                stride = int(hparams[3])
+                padding = hparams[4]
+                hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
+                                             strides=(stride, stride), padding=padding,
+                                             activation="relu")(hidden)
+            elif hparams[0] == "CB":
+                filters = int(hparams[1])
+                kernel_size = int(hparams[2])
+                stride = int(hparams[3])
+                padding = hparams[4]
+                hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
+                                             strides=(stride, stride), padding=padding,
+                                             activation=None, use_bias=False)(hidden)
+                hidden = keras.layers.BatchNormalization()(hidden)
+                hidden = keras.layers.ReLU()(hidden)
+            elif hparams[0] == "M":
+                pool_size = int(hparams[1])
+                stride = int(hparams[2])
+                hidden = keras.layers.MaxPool2D(pool_size=(pool_size, pool_size), strides=(stride, stride),
+                                                padding="valid")(hidden)
+            elif hparams[0] == "R":
+                x = hidden
+                rl_layers = re.findall(pattern=r'\[([^\[\]]*)\]', string=layer)[0].split(',')
+                for residual_layer in rl_layers:
+                    rl_hparams = residual_layer.split("-")
+                    if rl_hparams[0] == "C":
+                        filters = int(rl_hparams[1])
+                        kernel_size = int(rl_hparams[2])
+                        stride = int(rl_hparams[3])
+                        padding = rl_hparams[4]
+                        hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
+                                                     strides=(stride, stride),
+                                                     padding=padding,
+                                                     activation="relu")(hidden)
+                        hidden = hidden + x
+                    elif rl_hparams[0] == "CB":
+                        filters = int(rl_hparams[1])
+                        kernel_size = int(rl_hparams[2])
+                        stride = int(rl_hparams[3])
+                        padding = rl_hparams[4]
+                        hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
+                                                     strides=(stride, stride),
+                                                     padding=padding,
+                                                     activation=None, use_bias=False)(hidden)
+                        hidden = keras.layers.BatchNormalization()(hidden)
+                        hidden = keras.layers.ReLU()(hidden)
+                        hidden = hidden + x
+                    else:
+                        ArgumentError(argument=residual_layer, message=f"Unexpected cnn argument: {layer}")
+            elif hparams[0] == "F":
+                hidden = keras.layers.Flatten()(hidden)
+            elif hparams[0] == "H":
+                hidden_layer_size = hparams[1]
+                hidden = keras.layers.Dense(units=hidden_layer_size, activation="relu")(hidden)
+            elif hparams[0] == "D":
+                dropout_rate = float(hparams[1])
+                hidden = keras.layers.Dropout(dropout_rate)(hidden)
             else:
                 raise ArgumentError(argument=layer, message=f"Unexpected cnn argument: {layer}")
-
-        hidden = ...
 
         # Add the final output layer
         outputs = keras.layers.Dense(MNIST.LABELS, activation="softmax")(hidden)
@@ -80,6 +126,7 @@ class Model(keras.Model):
             loss=keras.losses.SparseCategoricalCrossentropy(),
             metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
         )
+        self.summary()
 
 
 def main(args: argparse.Namespace) -> dict[str, float]:
