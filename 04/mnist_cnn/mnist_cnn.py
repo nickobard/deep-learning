@@ -21,18 +21,41 @@ parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 
 
-# If you add more arguments, ReCodEx will keep them with your default values.
+def add_convolution_layer(last_layer, hparams, use_batch_norm: bool = False):
+    if use_batch_norm:
+        conv_layer = keras.layers.Conv2D(**hparams,
+                                         activation=None, use_bias=False)(last_layer)
+        batch_norm_layer = keras.layers.BatchNormalization()(conv_layer)
+        relu_layer = keras.layers.ReLU()(batch_norm_layer)
+        return relu_layer
+    else:
+        return keras.layers.Conv2D(**hparams,
+                                   activation="relu")(last_layer)
+
+
+def parse_and_add_convolution_layer(hparams_specs: str, last_layer):
+    # parse and extract hyperparameters
+    filters = int(hparams_specs[1])
+    kernel_size = int(hparams_specs[2])
+    stride = int(hparams_specs[3])
+    padding = hparams_specs[4]
+    hparams = {'filters': filters, 'kernel_size': (kernel_size, kernel_size),
+               'strides': (stride, stride), 'padding': padding}
+    # split depending if to use batch normalization or not
+    if hparams_specs[0].endswith('B'):
+        return add_convolution_layer(last_layer, hparams, use_batch_norm=True)
+    else:
+        return add_convolution_layer(last_layer, hparams)
 
 
 class Model(keras.Model):
     def __init__(self, args: argparse.Namespace) -> None:
-        # TODO: Create the model. The template uses the functional API, but
-        # feel free to use subclassing if you want.
+        # Functional API
+        # Input layer, used later to init model
         inputs = keras.Input(shape=[MNIST.H, MNIST.W, MNIST.C])
+        # hidden layer variable to store the last layer with all layers history
         hidden = keras.layers.Rescaling(1 / 255)(inputs)
 
-        # TODO: Add CNN layers specified by `args.cnn`, which contains
-        # a comma-separated list of the following layers:
         # - `C-filters-kernel_size-stride-padding`: Add a convolutional layer with ReLU
         #   activation and specified number of filters, kernel size, stride and padding.
         # - `CB-filters-kernel_size-stride-padding`: Same as `C`, but use batch normalization.
@@ -48,63 +71,34 @@ class Model(keras.Model):
         # - `F`: Flatten inputs. Must appear exactly once in the architecture.
         # - `H-hidden_layer_size`: Add a dense layer with ReLU activation and the specified size.
         # - `D-dropout_rate`: Apply dropout with the given dropout rate.
-        # You can assume the resulting network is valid; it is fine to crash if it is not.
-        #
-        # Produce the results in the variable `hidden`.
+
+        # Regular expression to match every specification. Split by comma cannot be used because of the
+        # residual layers specification, may cantain commas internally.
         layer_args = re.findall(r'[^,]*\[.*\]|[^,]+', args.cnn)
+
         for layer in layer_args:
-            hparams = layer.split("-")
-            if hparams[0] == "C":
-                filters = int(hparams[1])
-                kernel_size = int(hparams[2])
-                stride = int(hparams[3])
-                padding = hparams[4]
-                hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
-                                             strides=(stride, stride), padding=padding,
-                                             activation="relu")(hidden)
-            elif hparams[0] == "CB":
-                filters = int(hparams[1])
-                kernel_size = int(hparams[2])
-                stride = int(hparams[3])
-                padding = hparams[4]
-                hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
-                                             strides=(stride, stride), padding=padding,
-                                             activation=None, use_bias=False)(hidden)
-                hidden = keras.layers.BatchNormalization()(hidden)
-                hidden = keras.layers.ReLU()(hidden)
-            elif hparams[0] == "M":
+            hparams = layer.split('-')
+            if hparams[0].startswith('C'):
+                hidden = parse_and_add_convolution_layer(hparams, hidden)
+            elif hparams[0] == 'M':
                 pool_size = int(hparams[1])
                 stride = int(hparams[2])
                 hidden = keras.layers.MaxPool2D(pool_size=(pool_size, pool_size), strides=(stride, stride),
                                                 padding="valid")(hidden)
             elif hparams[0] == "R":
-                x = hidden
+                # save reference to layer that is input to residual layers
+                residual_input = hidden
+                # separate residual layers specification from the whole specification.
                 rl_layers = re.findall(pattern=r'\[([^\[\]]*)\]', string=layer)[0].split(',')
+                # for each layer in residual layers
                 for residual_layer in rl_layers:
                     rl_hparams = residual_layer.split("-")
-                    if rl_hparams[0] == "C":
-                        filters = int(rl_hparams[1])
-                        kernel_size = int(rl_hparams[2])
-                        stride = int(rl_hparams[3])
-                        padding = rl_hparams[4]
-                        hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
-                                                     strides=(stride, stride),
-                                                     padding=padding,
-                                                     activation="relu")(hidden)
-                    elif rl_hparams[0] == "CB":
-                        filters = int(rl_hparams[1])
-                        kernel_size = int(rl_hparams[2])
-                        stride = int(rl_hparams[3])
-                        padding = rl_hparams[4]
-                        hidden = keras.layers.Conv2D(filters=filters, kernel_size=(kernel_size, kernel_size),
-                                                     strides=(stride, stride),
-                                                     padding=padding,
-                                                     activation=None, use_bias=False)(hidden)
-                        hidden = keras.layers.BatchNormalization()(hidden)
-                        hidden = keras.layers.ReLU()(hidden)
+                    if rl_hparams[0].startswith('C'):
+                        hidden = parse_and_add_convolution_layer(rl_hparams, hidden)
                     else:
                         ArgumentError(argument=residual_layer, message=f"Unexpected cnn argument: {layer}")
-                hidden = hidden + x
+                # add input to residual layers
+                hidden = hidden + residual_input
             elif hparams[0] == "F":
                 hidden = keras.layers.Flatten()(hidden)
             elif hparams[0] == "H":
