@@ -64,7 +64,7 @@ def main(args: argparse.Namespace) -> dict[str, float]:
             # TODO: Note that the images and labels are available in `cifar.data["images"]`
             # and `cifar.data["labels"]`.
             self._data = cifar.data
-            self._size = size
+            self._size = min(cifar.size, size)
 
             self._images = self._data['images']
             self._labels = self._data['labels']
@@ -77,7 +77,7 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         def __getitem__(self, index: int) -> tuple[np.ndarray | torch.Tensor, int]:
             # TODO: Return the `index`-th example from the dataset, with the image optionally
             # passed through the `augmentation_fn` if it is not `None`.
-            if augmentation_fn:
+            if self._augmentation_fn:
                 return self._augmentation_fn(self._images[index]), self._labels[index]
             return self._images[index], self._labels[index]
 
@@ -116,8 +116,8 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     # TODO: Create `train` and `dev` instances of `TorchDataset` from the corresponding
     # `cifar` datasets. Limit their sizes to 5_000 and 1_000 examples, respectively,
     # and use the `augmentation_fn` for the training dataset.
-    train = TorchDataset(cifar.train, cifar.train.size, augmentation_fn=augmentation_fn)
-    dev = TorchDataset(cifar.dev, cifar.dev.size, augmentation_fn=augmentation_fn)
+    train = TorchDataset(cifar.train, 5000, augmentation_fn=augmentation_fn)
+    dev = TorchDataset(cifar.dev, 1000)
 
     if args.show_images:
         from torch.utils import tensorboard
