@@ -286,3 +286,5 @@ VENV_DIR
 
 npfl138
 mnist.npz
+
+*.npz
