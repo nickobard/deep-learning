@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+
 os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
 
 import numpy as np
@@ -19,6 +20,8 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Evalu
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--show_images", default=None, const=10, type=int, nargs="?", help="Show augmented images.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -60,16 +63,23 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         def __init__(self, cifar: CIFAR10.Dataset, size: int, augmentation_fn=None) -> None:
             # TODO: Note that the images and labels are available in `cifar.data["images"]`
             # and `cifar.data["labels"]`.
-            ...
+            self._data = cifar.data
+            self._size = size
+
+            self._images = self._data['images']
+            self._labels = self._data['labels']
+
+            self._augmentation_fn = augmentation_fn
 
         def __len__(self) -> int:
-            # TODO: Return the appropriate size.
-            ...
+            return self._size
 
         def __getitem__(self, index: int) -> tuple[np.ndarray | torch.Tensor, int]:
             # TODO: Return the `index`-th example from the dataset, with the image optionally
             # passed through the `augmentation_fn` if it is not `None`.
-            ...
+            if augmentation_fn:
+                return self._augmentation_fn(self._images[index]), self._labels[index]
+            return self._images[index], self._labels[index]
 
     if args.augment:
         # Construct a sequence of augmentation transformations from `torchvision.transforms.v2`.
@@ -81,7 +91,10 @@ def main(args: argparse.Namespace) -> dict[str, float]:
             # - then add `v2.RandomCrop` that chooses a random crop of size 32x32,
             # - and finally add `v2.RandomHorizontalFlip` that uniformly
             #   randomly flips the image horizontally.
-            ...
+            v2.RandomResize(min_size=28, max_size=36),
+            v2.Pad(padding=4),
+            v2.RandomCrop(size=(32, 32)),
+            v2.RandomHorizontalFlip()
         ])
 
         def augmentation_fn(image: np.ndarray) -> torch.Tensor:
@@ -92,15 +105,19 @@ def main(args: argparse.Namespace) -> dict[str, float]:
             # Next, apply the `transformation` to the image (by calling it with
             # the image as an argument), and finally permute the axes back to
             # the original order.
-            return ...
+            pt_image = torch.from_numpy(image).type(torch.uint8)
+            pt_image_chw = pt_image.permute(2, 0, 1)
+            transformed_chw = transformation(pt_image_chw)
+            transformed_hwc = transformed_chw.permute(1, 2, 0)
+            return transformed_hwc
     else:
         augmentation_fn = None
 
     # TODO: Create `train` and `dev` instances of `TorchDataset` from the corresponding
     # `cifar` datasets. Limit their sizes to 5_000 and 1_000 examples, respectively,
     # and use the `augmentation_fn` for the training dataset.
-    train = ...
-    dev = ...
+    train = TorchDataset(cifar.train, cifar.train.size, augmentation_fn=augmentation_fn)
+    dev = TorchDataset(cifar.dev, cifar.dev.size, augmentation_fn=augmentation_fn)
 
     if args.show_images:
         from torch.utils import tensorboard
@@ -116,8 +133,8 @@ def main(args: argparse.Namespace) -> dict[str, float]:
 
     # TODO: Create `train` and `dev` instances of `torch.utils.data.DataLoader` from
     # the datasets, using the given `args.batch_size` and shuffling the training dataset.
-    train = ...
-    dev = ...
+    train = torch.utils.data.DataLoader(dataset=train, batch_size=args.batch_size, shuffle=True)
+    dev = torch.utils.data.DataLoader(dataset=dev, batch_size=args.batch_size, shuffle=True)
 
     # Train
     logs = model.fit(train, epochs=args.epochs, validation_data=dev)
