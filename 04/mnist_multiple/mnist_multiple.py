@@ -21,7 +21,6 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 
 # If you add more arguments, ReCodEx will keep them with your default values.
 
-
 class Model(keras.Model):
     def __init__(self, args: argparse.Namespace) -> None:
         # Create a model with two inputs, both images of size [MNIST.H, MNIST.W, MNIST.C].
@@ -30,63 +29,45 @@ class Model(keras.Model):
             keras.Input(shape=[MNIST.H, MNIST.W, MNIST.C]),
         )
 
-        # TODO: The model starts by passing each input image through the same
-        # subnetwork (with shared weights), which should perform
-        # - keras.layers.Rescaling(1 / 255) to convert images to floats in [0, 1] range,
-        # - convolution with 10 filters, 3x3 kernel size, stride 2, "valid" padding, ReLU activation,
-        # - convolution with 20 filters, 3x3 kernel size, stride 2, "valid" padding, ReLU activation,
-        # - flattening layer,
-        # - fully connected layer with 200 neurons and ReLU activation,
-        # obtaining a 200-dimensional feature vector FV of each image.
-        rescaled_1 = keras.layers.Rescaling(1 / 255)(images[0])
-        rescaled_2 = keras.layers.Rescaling(1 / 255)(images[1])
-        conv1 = keras.layers.Conv2D(filters=10, kernel_size=(3, 3), strides=(2, 2), padding='valid',
-                                    activation='relu')
-        hidden_1 = conv1(rescaled_1)
-        hidden_2 = conv1(rescaled_2)
-        conv2 = keras.layers.Conv2D(filters=20, kernel_size=(3, 3), strides=(2, 2), padding='valid',
-                                    activation='relu')
-        hidden_1 = conv2(hidden_1)
-        hidden_2 = conv2(hidden_2)
-        flatten_layer = keras.layers.Flatten()
-        hidden_1 = flatten_layer(hidden_1)
-        hidden_2 = flatten_layer(hidden_2)
-        d1 = keras.layers.Dense(units=200, activation='relu')
-        hidden_1 = d1(hidden_1)
-        hidden_2 = d1(hidden_2)
+        # for both images shared network
+        common_subnetwork = [
+            keras.layers.Rescaling(1 / 255),
+            keras.layers.Conv2D(filters=10, kernel_size=(3, 3), strides=(2, 2), padding='valid',
+                                activation='relu'),
+            keras.layers.Conv2D(filters=20, kernel_size=(3, 3), strides=(2, 2), padding='valid',
+                                activation='relu'),
+            keras.layers.Flatten(),
+            keras.layers.Dense(units=200, activation='relu')
+        ]
 
-        # TODO: Using the computed representations, the model should produce four outputs:
-        # - first, compute _direct comparison_ whether the first digit is
-        #   greater than the second, by
-        #   - concatenating the two 200-dimensional image representations FV,
-        #   - processing them using another 200-neuron ReLU dense layer
-        #   - computing one output using a dense layer with "sigmoid" activation
-        # - then, classify the computed representation FV of the first image using
-        #   a densely connected softmax layer into 10 classes;
-        # - then, classify the computed representation FV of the second image using
-        #   the same layer (identical, i.e., with shared weights) into 10 classes;
-        # - finally, compute _indirect comparison_ whether the first digit
-        #   is greater than second, by comparing the predictions from the above
-        #   two outputs; convert the comparison to "float32" using `keras.ops.cast`.
+        # forward pass for each image
+        hiddens = []
+        for hidden in images:
+            for layer in common_subnetwork:
+                hidden = layer(hidden)
+            hiddens.append(hidden)
 
-        direct_hidden = keras.layers.Concatenate()([hidden_1, hidden_2])
+        # direct comparison - concatenate features from both images and pass forward to
+        # direct comparison subnetwork
+        direct_hidden = keras.layers.Concatenate()(hiddens)
         direct_hidden = keras.layers.Dense(units=200, activation='relu')(direct_hidden)
         direct_output = keras.layers.Dense(units=1, activation='sigmoid')(direct_hidden)
 
-        softmax = keras.layers.Dense(units=MNIST.LABELS, activation='softmax')
-        indirect_output_1 = softmax(hidden_1)
-        indirect_output_2 = softmax(hidden_2)
+        # indirect comparison - get prediction of both images, then compare predicted labels.
+        probabilities_layer = keras.layers.Dense(units=MNIST.LABELS, activation='softmax')
+        indirect_outputs = [probabilities_layer(hidden) for hidden in hiddens]
 
         with torch.no_grad():
-            digit_1 = keras.ops.argmax(indirect_output_1, axis=-1)
-            digit_2 = keras.ops.argmax(indirect_output_2, axis=-1)
-            comparison = keras.ops.cast(digit_1 > digit_2, "float32")
+            digit_pred_1 = keras.ops.argmax(indirect_outputs[0], axis=-1)
+            digit_pred_2 = keras.ops.argmax(indirect_outputs[1], axis=-1)
+            indirect_comparison = keras.ops.cast(digit_pred_1 > digit_pred_2, "float32")
 
+        # output definition of the model
         outputs = {
             "direct_comparison": direct_output,
-            "digit_1": indirect_output_1,
-            "digit_2": indirect_output_2,
-            "indirect_comparison": comparison,
+            "digit_1": indirect_outputs[0],
+            "digit_2": indirect_outputs[1],
+            "indirect_comparison": indirect_comparison,
         }
 
         # Finally, construct the model.
@@ -98,11 +79,7 @@ class Model(keras.Model):
         # the keys of the `outputs` dictionary.
         self.output_names = sorted(outputs.keys())
 
-        # TODO: Define the appropriate losses for the model outputs
-        # "direct_comparison", "digit_1", "digit_2". Regarding metrics,
-        # the accuracy of both the direct and indirect comparisons should be
-        # computed; name both metrics "accuracy" (i.e., pass "accuracy" as the
-        # first argument of the metric object).
+
         self.compile(
             optimizer=keras.optimizers.Adam(),
             loss={
@@ -127,25 +104,22 @@ class Model(keras.Model):
         # You can assume that the size of the original dataset is even.
         class TorchDataset(torch.utils.data.Dataset):
             def __len__(self) -> int:
-                # TODO: The new dataset has half the size of the original one.
+                # half the dataset size, because we take pairs.
                 return len(images) // 2
 
             def __getitem__(self, index: int) -> tuple[tuple[np.ndarray, np.ndarray], dict[str, np.ndarray]]:
-                # TODO: Given an `index`, generate a dataset element suitable for our model.
-                # Notably, the element should be a pair `(input, output)`, with
-                # - `input` being a pair of images `(images[2 * index], images[2 * index + 1])`,
-                # - `output` being a dictionary with keys "digit_1", "digit_2", "direct_comparison",
-                #   and "indirect_comparison".
-                images_pair = (images[2 * index], images[2 * index + 1])
-                labels_pair = (labels[2 * index], labels[2 * index + 1])
-                comparison_result = labels_pair[0] > labels_pair[1]
+                # adjust dataset for our model output, so we can compare true output with predictions.
+                image_1, image_2 = images[2 * index], images[2 * index + 1]
+                label_1, label_2 = labels[2 * index], labels[2 * index + 1]
+                comparison = label_1 > label_2
 
                 output = {
-                    "digit_1": labels_pair[0],
-                    "digit_2": labels_pair[1],
-                    "direct_comparison": comparison_result,
-                    "indirect_comparison": comparison_result}
-                return images_pair, output
+                    "digit_1": label_1,
+                    "digit_2": label_2,
+                    "direct_comparison": comparison,
+                    "indirect_comparison": comparison}
+
+                return (image_1, image_2), output
 
         return TorchDataset()
 
