@@ -38,11 +38,12 @@ class Model(keras.Model):
         # - flattening layer,
         # - fully connected layer with 200 neurons and ReLU activation,
         # obtaining a 200-dimensional feature vector FV of each image.
-        rescaled = keras.layers.Rescaling(1 / 255)(images)
+        rescaled_1 = keras.layers.Rescaling(1 / 255)(images[0])
+        rescaled_2 = keras.layers.Rescaling(1 / 255)(images[1])
         conv1 = keras.layers.Conv2D(filters=10, kernel_size=(3, 3), strides=(2, 2), padding='valid',
                                     activation='relu')
-        hidden_1 = conv1(rescaled[0])
-        hidden_2 = conv1(rescaled[1])
+        hidden_1 = conv1(rescaled_1)
+        hidden_2 = conv1(rescaled_2)
         conv2 = keras.layers.Conv2D(filters=20, kernel_size=(3, 3), strides=(2, 2), padding='valid',
                                     activation='relu')
         hidden_1 = conv2(hidden_1)
@@ -68,7 +69,7 @@ class Model(keras.Model):
         #   is greater than second, by comparing the predictions from the above
         #   two outputs; convert the comparison to "float32" using `keras.ops.cast`.
 
-        direct_hidden = keras.layers.Concatenate(axis=0)([hidden_1, hidden_2])
+        direct_hidden = keras.layers.Concatenate()([hidden_1, hidden_2])
         direct_hidden = keras.layers.Dense(units=200, activation='relu')(direct_hidden)
         direct_output = keras.layers.Dense(units=1, activation='sigmoid')(direct_hidden)
 
@@ -76,16 +77,16 @@ class Model(keras.Model):
         indirect_output_1 = softmax(hidden_1)
         indirect_output_2 = softmax(hidden_2)
 
-        digit_1 = keras.ops.argmax(indirect_output_1)
-        digit_2 = keras.ops.argmax(indirect_output_2)
-
-
+        with torch.no_grad():
+            digit_1 = keras.ops.argmax(indirect_output_1, axis=-1)
+            digit_2 = keras.ops.argmax(indirect_output_2, axis=-1)
+            comparison = keras.ops.cast(digit_1 > digit_2, "float32")
 
         outputs = {
             "direct_comparison": direct_output,
             "digit_1": indirect_output_1,
             "digit_2": indirect_output_2,
-            "indirect_comparison": digit_1 > digit_2,
+            "indirect_comparison": comparison,
         }
 
         # Finally, construct the model.
@@ -106,8 +107,8 @@ class Model(keras.Model):
             optimizer=keras.optimizers.Adam(),
             loss={
                 "direct_comparison": keras.losses.BinaryCrossentropy(),
-                "digit_1": keras.losses.CategoricalCrossentropy(),
-                "digit_2": keras.losses.CategoricalCrossentropy(),
+                "digit_1": keras.losses.SparseCategoricalCrossentropy(),
+                "digit_2": keras.losses.SparseCategoricalCrossentropy(),
             },
             metrics={
                 "direct_comparison": [keras.metrics.BinaryAccuracy(name='accuracy')],
@@ -127,7 +128,7 @@ class Model(keras.Model):
         class TorchDataset(torch.utils.data.Dataset):
             def __len__(self) -> int:
                 # TODO: The new dataset has half the size of the original one.
-                return int(len(images) / 2)
+                return len(images) // 2
 
             def __getitem__(self, index: int) -> tuple[tuple[np.ndarray, np.ndarray], dict[str, np.ndarray]]:
                 # TODO: Given an `index`, generate a dataset element suitable for our model.
@@ -135,7 +136,16 @@ class Model(keras.Model):
                 # - `input` being a pair of images `(images[2 * index], images[2 * index + 1])`,
                 # - `output` being a dictionary with keys "digit_1", "digit_2", "direct_comparison",
                 #   and "indirect_comparison".
-                return (images[2 * index], images[2 * index + 1]), (labels[2 * index], labels[2 * index + 1])
+                images_pair = (images[2 * index], images[2 * index + 1])
+                labels_pair = (labels[2 * index], labels[2 * index + 1])
+                comparison_result = labels_pair[0] > labels_pair[1]
+
+                output = {
+                    "digit_1": labels_pair[0],
+                    "digit_2": labels_pair[1],
+                    "direct_comparison": comparison_result,
+                    "indirect_comparison": comparison_result}
+                return images_pair, output
 
         return TorchDataset()
 
