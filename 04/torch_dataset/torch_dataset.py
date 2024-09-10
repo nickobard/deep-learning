@@ -56,41 +56,23 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
     )
 
-    # TODO: Create a Torch dataset constructible from the given `CIFAR10.Dataset`.
-    # You should use only the first `size` examples of the dataset, and optional
-    # augmentation function `augmentation_fn` may be applied to the images.
     class TorchDataset(torch.utils.data.Dataset):
         def __init__(self, cifar: CIFAR10.Dataset, size: int, augmentation_fn=None) -> None:
-            # TODO: Note that the images and labels are available in `cifar.data["images"]`
-            # and `cifar.data["labels"]`.
-            self._data = cifar.data
             self._size = min(cifar.size, size)
-
-            self._images = self._data['images']
-            self._labels = self._data['labels']
-
+            self._images = cifar.data['images'][:self._size]
+            self._labels = cifar.data['labels'][:self._size]
             self._augmentation_fn = augmentation_fn
 
         def __len__(self) -> int:
             return self._size
 
         def __getitem__(self, index: int) -> tuple[np.ndarray | torch.Tensor, int]:
-            # TODO: Return the `index`-th example from the dataset, with the image optionally
-            # passed through the `augmentation_fn` if it is not `None`.
             if self._augmentation_fn:
                 return self._augmentation_fn(self._images[index]), self._labels[index]
             return self._images[index], self._labels[index]
 
     if args.augment:
-        # Construct a sequence of augmentation transformations from `torchvision.transforms.v2`.
         transformation = v2.Compose([
-            # TODO: Add the following transformations:
-            # - first create a `v2.RandomResize` that scales the image to
-            #   random size in range [28, 36],
-            # - then add `v2.Pad` that pads the image with 4 pixels on each side,
-            # - then add `v2.RandomCrop` that chooses a random crop of size 32x32,
-            # - and finally add `v2.RandomHorizontalFlip` that uniformly
-            #   randomly flips the image horizontally.
             v2.RandomResize(min_size=28, max_size=36),
             v2.Pad(padding=4),
             v2.RandomCrop(size=(32, 32)),
@@ -98,13 +80,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         ])
 
         def augmentation_fn(image: np.ndarray) -> torch.Tensor:
-            # TODO: First, convert the numpy `images` to a PyTorch tensor of uint8s,
-            # preferably by using `torch.from_numpy` or `torch.as_tensor` to avoid copying.
-            # Then, because of the channels-position mismatch, permute the axes
-            # in the image to change the order of the axes from HWC to CHW.
-            # Next, apply the `transformation` to the image (by calling it with
-            # the image as an argument), and finally permute the axes back to
-            # the original order.
             pt_image = torch.from_numpy(image).type(torch.uint8)
             pt_image_chw = pt_image.permute(2, 0, 1)
             transformed_chw = transformation(pt_image_chw)
@@ -113,9 +88,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     else:
         augmentation_fn = None
 
-    # TODO: Create `train` and `dev` instances of `TorchDataset` from the corresponding
-    # `cifar` datasets. Limit their sizes to 5_000 and 1_000 examples, respectively,
-    # and use the `augmentation_fn` for the training dataset.
     train = TorchDataset(cifar.train, 5000, augmentation_fn=augmentation_fn)
     dev = TorchDataset(cifar.dev, 1000)
 
@@ -131,8 +103,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         tb_writer.close()
         print("Saved first {} training imaged to logs/{}".format(GRID * GRID, TAG))
 
-    # TODO: Create `train` and `dev` instances of `torch.utils.data.DataLoader` from
-    # the datasets, using the given `args.batch_size` and shuffling the training dataset.
     train = torch.utils.data.DataLoader(dataset=train, batch_size=args.batch_size, shuffle=True)
     dev = torch.utils.data.DataLoader(dataset=dev, batch_size=args.batch_size, shuffle=True)
 
