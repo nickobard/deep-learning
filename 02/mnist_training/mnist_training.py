@@ -82,40 +82,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
 
     model.summary()
 
-    # TODO: Use the required `args.optimizer` (either `SGD` or `Adam`).
-    # - For `SGD`, if `args.momentum` is specified, use Nesterov momentum.
-    # - If `args.decay` is not specified, pass the given `args.learning_rate`
-    #   directly to the optimizer as a `learning_rate` argument.
-    # - If `args.decay` is set, then
-    #   - for `linear`, use `keras.optimizers.schedules.PolynomialDecay` with the
-    #     default `power=1.0`, and set `end_learning_rate` appropriately;
-    #     https://keras.io/api/optimizers/learning_rate_schedules/polynomial_decay/
-    #   - for `exponential`, use `keras.optimizers.schedules.ExponentialDecay`,
-    #     and set `decay_rate` appropriately (keep the default `staircase=False`);
-    #     https://keras.io/api/optimizers/learning_rate_schedules/exponential_decay/
-    #   - for `cosine`, use `keras.optimizers.schedules.CosineDecay`,
-    #     and set `alpha` appropriately;
-    #     https://keras.io/api/optimizers/learning_rate_schedules/cosine_decay/
-    #   - in all cases, you should reach the `args.learning_rate_final` just after the
-    #     training, i.e., the first update after the training should use exactly the
-    #     given `args.learning_rate_final`;
-    #   - in all cases, `decay_steps` must be **the total number of optimizer updates**,
-    #     i.e., the total number of training batches in all epochs. The size of
-    #     the training MNIST dataset is `mnist.train.size`, and you can assume it
-    #     is exactly divisible by `args.batch_size`.
-    #   Pass the created `{Polynomial,Exponential,Cosine}Decay` to the optimizer
-    #   using the `learning_rate` constructor argument.
-    #
-    #   If a learning rate schedule is used, TensorBoard automatically logs the last used learning
-    #   rate value in every epoch. Additionally, you can find out the last used learning
-    #   rate by printing `model.optimizer.learning_rate` (the original schedule is available
-    #   in `model.optimizer._learning_rate` if needed), so after training, the learning rate
-    #   should be `args.learning_rate_final`.
-
-    # print(mnist.train.size)
-    # print(args.batch_size)
-    # print(mnist.train.size//args.batch_size)
-
     if args.decay == 'linear':
         max_steps = (mnist.train.size // args.batch_size) * args.epochs
         learning_rate = keras.optimizers.schedules.PolynomialDecay(
@@ -143,7 +109,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         learning_rate = args.learning_rate
 
     if args.optimizer == 'SGD':
-
         if args.momentum is not None:
             kwargs = {'momentum': args.momentum, 'nesterov': True}
         else:
