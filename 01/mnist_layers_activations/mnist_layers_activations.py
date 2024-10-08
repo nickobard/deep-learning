@@ -12,7 +12,7 @@ import torch
 from mnist import MNIST
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
+
 parser.add_argument("--activation", default="none", choices=["none", "relu", "tanh", "sigmoid"], help="Activation.")
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
@@ -21,9 +21,6 @@ parser.add_argument("--hidden_layers", default=1, type=int, help="Number of laye
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-
-
-# If you add more arguments, ReCodEx will keep them with your default values.
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -68,23 +65,16 @@ def main(args: argparse.Namespace) -> dict[str, float]:
 
     # Create the model
     model = keras.Sequential()
+
     model.add(keras.Input([MNIST.H, MNIST.W, MNIST.C]))
-
-    # TODO: Finish the model. Namely:
-    # - start by adding a `keras.layers.Rescaling(1 / 255)` layer;
-    # - then add a `keras.layers.Flatten()` layer;
-    # - add `args.hidden_layers` number of fully connected hidden layers
-    #   `keras.layers.Dense()` with  `args.hidden_layer` neurons, using activation
-    #   from `args.activation`, allowing "none", "relu", "tanh", "sigmoid";
-    # - finally, add an output fully connected layer with  `MNIST.LABELS` units
-    #   and `softmax` activation.
-
     model.add(keras.layers.Rescaling(1 / 255))
     model.add(keras.layers.Flatten())
+
     activation = args.activation if args.activation != "none" else None
+
     for _ in range(args.hidden_layers):
         model.add(keras.layers.Dense(units=args.hidden_layer, activation=activation))
-    model.add(keras.layers.Dense(units=MNIST.LABELS,activation="softmax"))
+    model.add(keras.layers.Dense(units=MNIST.LABELS, activation="softmax"))
 
     model.compile(
         optimizer=keras.optimizers.Adam(),
@@ -99,7 +89,6 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         callbacks=[TorchTensorBoardCallback(args.logdir)],
     )
 
-    # Return development metrics for ReCodEx to validate.
     return {metric: values[-1] for metric, values in logs.history.items() if metric.startswith("val_")}
 
 

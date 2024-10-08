@@ -14,7 +14,6 @@ import torch.utils.tensorboard
 from mnist import MNIST
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
 parser.add_argument("--hidden_layer", default=100, type=int, help="Size of the hidden layer.")
@@ -22,9 +21,6 @@ parser.add_argument("--learning_rate", default=0.1, type=float, help="Learning r
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-
-
-# If you add more arguments, ReCodEx will keep them with your default values.
 
 
 class Model(keras.Model):
@@ -38,123 +34,101 @@ class Model(keras.Model):
         )
         self._b1 = keras.Variable(keras.ops.zeros([args.hidden_layer]), trainable=True)
 
-        # TODO(sgd_backpropagation): Create variables:
-        # - _W2, which is a trainable variable of size `[args.hidden_layer, MNIST.LABELS]`,
-        #   initialized to `keras.random.normal` value `with stddev=0.1` and `seed=args.seed`,
-        # - _b2, which is a trainable variable of size `[MNIST.LABELS]` initialized to zeros
+        # Initialize trainable variables for the second layer
+        # _W2: Weight matrix of shape [args.hidden_layer, MNIST.LABELS], initialized with a normal distribution
+        #      (stddev=0.1) and using the specified seed for reproducibility
         self._W2 = keras.Variable(keras.random.normal([args.hidden_layer, MNIST.LABELS], stddev=0.1, seed=args.seed),
                                   trainable=True)
+        # _b2: Bias vector of shape [MNIST.LABELS], initialized to zeros
         self._b2 = keras.Variable(keras.ops.zeros([MNIST.LABELS]), trainable=True)
 
     def predict(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # TODO(sgd_backpropagation): Define the computation of the network. Notably:
-        # - start by casting the input byte image to `float32` with `keras.ops.cast`
-        # - then divide the tensor by 255 to normalize it to the `[0, 1]` range
-        # - then reshape it to the shape `[inputs.shape[0], -1]`.
-        #   The -1 is a wildcard which is computed so that the number
-        #   of elements before and after the reshape is preserved.
-        # - then multiply it by `self._W1` and then add `self._b1`
-        # - apply `keras.ops.tanh`
-        # - multiply the result by `self._W2` and then add `self._b2`
-        # - finally apply `keras.ops.softmax` and return the result
+        # Forward pass through the network to compute predictions
+        # Cast input images to float32 and normalize pixel values to [0, 1]
         casted_inputs = keras.ops.cast(inputs, dtype="float32")
         normalized = casted_inputs / 255
+        # Flatten the images to shape [batch_size, num_features]
         prepared_inputs = normalized.reshape(inputs.shape[0], -1)
+        # Compute the hidden layer pre-activation values
         hidden_layers = prepared_inputs @ self._W1 + self._b1
+        # Apply tanh activation function
         activations = keras.ops.tanh(hidden_layers)
+        # Compute the output layer logits
         outputs = activations @ self._W2 + self._b2
+        # Apply softmax to obtain class probabilities
         predictions = keras.ops.softmax(outputs)
 
-        # TODO: In order to support manual gradient computation, you should
-        # return not only the output layer, but also the hidden layer after applying
-        # tanh, and the input layer after reshaping.
+        # Return predictions and intermediate activations for manual gradient computation
         return predictions, activations, prepared_inputs
 
     def train_epoch(self, dataset: MNIST.Datasplit) -> None:
         for batch in dataset.batches(self._args.batch_size):
-            # The batch contains
-            # - batch["images"] with shape [?, MNIST.H, MNIST.W, MNIST.C]
-            # - batch["labels"] with shape [?]
-            # Size of the batch is `self._args.batch_size`, except for the last, which
-            # might be smaller.
+            # Each batch contains:
+            # - batch["images"] with shape [batch_size, MNIST.H, MNIST.W, MNIST.C]
+            # - batch["labels"] with shape [batch_size]
+            # The last batch may be smaller than `self._args.batch_size`.
 
-            # TODO: Contrary to `sgd_backpropagation`, the goal here is to compute
-            # the gradient manually, without calling `.backward()`. ReCodEx disables
-            # PyTorch automatic differentiation during evaluation.
-            #
-            # Compute the input layer, hidden layer and output layer
-            # of the batch images using `self.predict`.
+            # Manually compute gradients without automatic differentiation
+            # Perform forward pass to get predictions and intermediate activations
             inputs, labels = batch['images'], batch['labels']
             predictions, activations, prepared_inputs = self.predict(inputs)
 
-            # TODO: Compute the gradient of the loss with respect to all
-            # variables. Note that the loss is computed as in `sgd_backpropagation`:
-            # - For every batch example, the loss is the categorical crossentropy of the
-            #   predicted probabilities and the gold label. To compute the crossentropy, you can
-            #   - either use `keras.ops.one_hot` to obtain one-hot encoded gold labels,
-            #   - or suitably use `keras.ops.take_along_axis` to "index" the predicted probabilities.
-            # - Finally, compute the average across the batch examples.
-            #
-            # During the gradient computation, you will need to compute
-            # a batched version of a so-called outer product
-            #   `C[a, i, j] = A[a, i] * B[a, j]`,
-            # which you can achieve by using for example
-            #   `A[:, :, np.newaxis] * B[:, np.newaxis, :]`
-            # or with
-            #   `keras.ops.einsum("ai,aj->aij", A, B)`.
+            # Convert labels to one-hot encoding for loss computation
             labels = keras.ops.one_hot(labels, num_classes=MNIST.LABELS)
 
-            # loss_manual = -keras.ops.sum(labels * keras.ops.log(predictions), axis=1)
-            # loss = keras.ops.mean(loss_manual)
+            # Compute gradients of the loss with respect to model parameters
 
-            # self.zero_grad()
-            # loss.backward()
-
+            # Gradient of the loss with respect to the output logits (pre-softmax activations)
             z2_grad = predictions - labels
+            # Gradient of the loss with respect to the second layer biases (_b2)
             b2_grad = keras.ops.mean(z2_grad, axis=0)
 
+            # Gradient of the loss with respect to the second layer weights (_W2)
+            # Calculated using batched outer product between activations and z2_grad
             W2_outer_prod = activations[:, :, np.newaxis] * z2_grad[:, np.newaxis, :]
             W2_grad = keras.ops.mean(W2_outer_prod, axis=0)
 
+            # Compute derivative of the tanh activation function for the hidden layer
             a_grad = activations ** 2
             a_grad = 1 - a_grad
 
+            # Gradient of the loss with respect to the hidden layer pre-activations (z1)
             W2 = self._W2
             z1_grad = W2 @ keras.ops.transpose(z2_grad)
+
+            # Gradient of the loss with respect to the first layer biases (_b1)
             z1_grad = keras.ops.transpose(z1_grad) * a_grad
             b1_grad = keras.ops.mean(z1_grad, axis=0)
-            # b1_autograd = self._b1.value.grad
 
+            # Gradient of the loss with respect to the first layer weights (_W1)
+            # Calculated using batched outer product between inputs and z1_grad
             W1_outer_prod = prepared_inputs[:, :, np.newaxis] * z1_grad[:, np.newaxis, :]
             W1_grad = keras.ops.mean(W1_outer_prod, axis=0)
-            # W1_autograd = self._W1.value.grad
 
+            # Update the model parameters using Stochastic Gradient Descent
             variables = [self._W1, self._b1, self._W2, self._b2]
             gradients = [W1_grad, b1_grad, W2_grad, b2_grad]
-            # TODO(sgd_backpropagation): Perform the SGD update with learning rate `self._args.learning_rate`
-            # for the variable and computed gradient. You can modify the
-            # variable value with `variable.assign` or in this case the more
-            # efficient `variable.assign_sub`.
-            # with torch.no_grad():
             for variable, gradient in zip(variables, gradients):
+                # Update each variable by subtracting the learning rate times the gradient
                 g_hat = gradient
                 variable.assign_sub(g_hat * self._args.learning_rate)
 
     def evaluate(self, dataset: MNIST.Datasplit) -> float:
-        # Compute the accuracy of the model prediction
+        # Compute the accuracy of the model predictions
         correct = 0
         for batch in dataset.batches(self._args.batch_size):
-            # TODO: Compute the probabilities of the batch images using `self.predict`
-            # and convert them to Numpy with `keras.ops.convert_to_numpy`.
             inputs, labels = batch['images'], batch['labels']
+            # Obtain predicted probabilities from the model and convert to a NumPy array
             probabilities = keras.ops.convert_to_numpy(self.predict(inputs)[0])
 
-            # TODO(sgd_backpropagation): Evaluate how many batch examples were predicted
-            # correctly and increase `correct` variable accordingly.
+            # Determine predicted class labels by selecting the class with the highest probability
             predicted_labels = np.argmax(probabilities, axis=1)
+            # Create a boolean array indicating correct predictions
             correctly_predicted = predicted_labels == labels
+            # Update the count of correct predictions
             correct += np.sum(correctly_predicted)
 
+        # Calculate and return the accuracy as the proportion of correct predictions
         return correct / dataset.size
 
 
@@ -181,19 +155,15 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
     model = Model(args)
 
     for epoch in range(args.epochs):
-        # TODO: Run the `train_epoch` with `mnist.train` dataset
         model.train_epoch(mnist.train)
-        # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
         accuracy = model.evaluate(mnist.dev)
         print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
         writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
 
-    # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
     test_accuracy = model.evaluate(mnist.test)
     print("Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy), flush=True)
     writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
 
-    # Return dev and test accuracies for ReCodEx to validate.
     return accuracy, test_accuracy
 
 

@@ -12,7 +12,6 @@ import re
 from mnist import MNIST
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--cnn", default=None, type=str, help="CNN architecture.")
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")

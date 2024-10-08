@@ -11,14 +11,14 @@ import numpy as np
 import torch
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
+
 parser.add_argument("--evaluate", default=False, action="store_true", help="Evaluate the given model")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--render", default=False, action="store_true", help="Render during evaluation")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-# If you add more arguments, ReCodEx will keep them with your default values.
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
+
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
 parser.add_argument("--model", default="gym_cartpole_model.keras", type=str, help="Output model path.")
 parser.add_argument("--hidden_layer", default=128, type=int, help="Size of the hidden layer.")
@@ -48,14 +48,12 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
         return self._writers[writer]
 
     def add_logs(self, writer, logs, step):
-        # print(" - ", logs, " (add logs)")
         if logs:
             for key, value in logs.items():
                 self.writer(writer).add_scalar(key, value, step)
             self.writer(writer).flush()
 
     def on_epoch_end(self, epoch, logs=None):
-        # print(" - ", logs, " (on epoch end)")
         if logs:
             if isinstance(getattr(self.model, "optimizer", None), keras.optimizers.Optimizer):
                 logs = logs | {"learning_rate": keras.ops.convert_to_numpy(self.model.optimizer.learning_rate)}
@@ -131,11 +129,7 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         np.random.shuffle(data)
         observations, labels = data[:, :-1], data[:, -1].astype(np.int32)
 
-        # TODO: Create the model in the `model` variable. Note that
-        # the model can perform any of:
-        # - binary classification with 1 output and sigmoid activation;
-        # - two-class classification with 2 outputs and softmax activation.
-
+        # Creating the model.
         model = keras.Sequential()
 
         model.add(keras.layers.Input([observations.shape[1]]))
@@ -182,7 +176,7 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         else:
             optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
 
-        # TODO: Prepare the model for training using the `model.compile` method.
+        # Preparing the model for training
         model.compile(optimizer=optimizer,
                       loss=keras.losses.BinaryCrossentropy(),
                       metrics=[keras.metrics.BinaryAccuracy(name="accuracy")])
@@ -197,7 +191,6 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         model.save(args.model)
 
     else:
-        # Evaluating, either manually or in ReCodEx
         model = keras.models.load_model(args.model, compile=False)
 
         if args.recodex:

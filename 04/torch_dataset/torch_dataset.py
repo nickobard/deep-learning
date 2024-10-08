@@ -12,7 +12,6 @@ from torchvision.transforms import v2
 from cifar10 import CIFAR10
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--augment", default=False, action="store_true", help="Whether to augment the data.")
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=5, type=int, help="Number of epochs.")
@@ -20,9 +19,6 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Evalu
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--show_images", default=None, const=10, type=int, nargs="?", help="Show augmented images.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-
-
-# If you add more arguments, ReCodEx will keep them with your default values.
 
 
 def main(args: argparse.Namespace) -> dict[str, float]:

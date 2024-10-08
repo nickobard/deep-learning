@@ -59,31 +59,27 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
 
     individual_accuracies, ensemble_accuracies = [], []
     for model in range(args.models):
-        # TODO: Compute the accuracy on the dev set for the individual `models[model]`.
+        # Retrieve the dev set images and labels
         X = mnist.dev.data["images"]
         y = mnist.dev.data["labels"]
 
+        # Initialize the accuracy metric
         cat_acc = keras.metrics.SparseCategoricalAccuracy()
 
+        # Compute accuracy of the individual model on the dev set
         cat_acc.update_state(y_true=y, y_pred=models[model].predict(X))
         individual_accuracy = cat_acc.result()
         cat_acc.reset_state()
 
-        # TODO: Compute the accuracy on the dev set for the ensemble `models[0:model+1]`.
-        #
-        # Generally you can choose one of the following approaches:
-        # 1) Use Keras Functional API and construct a `keras.Model` averaging the models
-        #    in the ensemble (using for example `keras.layers.Average` or manually
-        #    with `keras.ops.mean`). Then you can compile the model with the required metric
-        #    (and with a loss; but an optimizer is not required) and use `model.evaluate`.
-        # 2) Manually perform the averaging (using PyTorch or NumPy). In this case you do not
-        #    need to construct Keras ensemble model at all, and instead call `model.predict`
-        #    on the individual models and average the results. To measure accuracy,
-        #    either do it completely manually or use `keras.metrics.SparseCategoricalAccuracy`.
+        # Compute accuracy of the ensemble of models up to the current one
+        # Collect predictions from all models in the ensemble
         predictions = []
         for m in models[0:model + 1]:
             predictions.append(m.predict(X))
+
+        # Average the predictions across the ensemble
         mean_predictions = keras.ops.mean(predictions, axis=0)
+        # Update the accuracy metric with the averaged predictions
         cat_acc.update_state(y_true=y, y_pred=mean_predictions)
 
         # Store the accuracies
